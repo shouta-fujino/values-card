@@ -168,28 +168,31 @@ async function leaveRoom(skipUpdate = false) {
 async function startGame() {
   const data = currentRoomData;
   if (!data || data.hostId !== playerId || data.status !== "lobby") return;
-  const players = sortedPlayers(data.players);
-  if (players.length < 2) {
+  const playerIds = Object.keys(data.players || {});
+  if (playerIds.length < 2) {
     alert("2人以上で開始できます。");
     return;
   }
+  const turnOrder = shuffle(playerIds);
   const deck = shuffle(VALUES.map((_, i) => i));
   const playersUpdate = {};
-  for (const p of players) {
+  turnOrder.forEach((pid, i) => {
     const hand = deck.splice(0, HAND_SIZE);
-    playersUpdate[p.id] = {
-      ...data.players[p.id],
+    playersUpdate[pid] = {
+      ...data.players[pid],
+      seat: i,
       hand,
+      discard: [],
       finalHand: null,
       lastDrawnCard: null,
       lastDrawnFrom: null
     };
-  }
+  });
   await update(ref(db, `rooms/${currentRoomCode}`), {
     status: "playing",
     deck,
-    discard: [],
-    currentSeat: players[0].seat,
+    actionLog: [],
+    currentSeat: 0,
     turnPhase: "draw",
     players: playersUpdate
   });
@@ -219,36 +222,45 @@ async function drawFromDeck() {
   });
 }
 
-async function drawFromDiscard() {
+async function drawFromDiscard(targetPlayerId) {
   if (!isMyTurn() || currentRoomData.turnPhase !== "draw") return;
-  const discard = (currentRoomData.discard || []).slice();
+  if (targetPlayerId === playerId) return;
+  const target = currentRoomData.players?.[targetPlayerId];
+  if (!target) return;
+  const discard = (target.discard || []).slice();
   if (discard.length === 0) return;
   const card = discard.pop();
   const hand = (currentRoomData.players[playerId].hand || []).slice();
   hand.push(card);
   await update(ref(db, `rooms/${currentRoomCode}`), {
-    discard,
+    [`players/${targetPlayerId}/discard`]: discard,
     [`players/${playerId}/hand`]: hand,
     [`players/${playerId}/lastDrawnCard`]: card,
-    [`players/${playerId}/lastDrawnFrom`]: "discard",
+    [`players/${playerId}/lastDrawnFrom`]: targetPlayerId,
     turnPhase: "discard"
   });
 }
 
 async function discardCard(cardIdx) {
   if (!isMyTurn() || currentRoomData.turnPhase !== "discard") return;
-  const hand = (currentRoomData.players[playerId].hand || []).slice();
+  const me = currentRoomData.players[playerId];
+  const hand = (me.hand || []).slice();
   const pos = hand.indexOf(cardIdx);
   if (pos === -1) return;
   hand.splice(pos, 1);
-  const discard = (currentRoomData.discard || []).slice();
-  discard.push(cardIdx);
+  const myDiscard = (me.discard || []).slice();
+  myDiscard.push(cardIdx);
+
+  const log = (currentRoomData.actionLog || []).slice();
+  log.unshift({ playerId, cardIdx, at: Date.now() });
+  if (log.length > 5) log.length = 5;
 
   const updates = {
     [`players/${playerId}/hand`]: hand,
+    [`players/${playerId}/discard`]: myDiscard,
     [`players/${playerId}/lastDrawnCard`]: null,
     [`players/${playerId}/lastDrawnFrom`]: null,
-    discard
+    actionLog: log
   };
 
   if ((currentRoomData.deck || []).length === 0) {
@@ -325,20 +337,59 @@ function renderGame() {
     turnEl.classList.remove("mine");
   }
   $("#phase-hint").textContent = myTurn
-    ? (data.turnPhase === "draw" ? "山札 or 捨て札から1枚引く" : "捨てるカードを1枚タップ")
+    ? (data.turnPhase === "draw" ? "山札 or 他の人の捨て札から1枚引く" : "捨てるカードを1枚タップ")
     : "";
 
   const deckCount = (data.deck || []).length;
-  const discard = data.discard || [];
   $("#deck-count").textContent = deckCount;
-  $("#discard-top").textContent = discard.length ? VALUES[discard[discard.length - 1]] : "–";
 
   const canDrawDeck = myTurn && data.turnPhase === "draw" && deckCount > 0;
-  const canDrawDiscard = myTurn && data.turnPhase === "draw" && discard.length > 0;
   $("#pile-deck").disabled = !canDrawDeck;
-  $("#pile-discard").disabled = !canDrawDiscard;
   $("#pile-deck").classList.toggle("active", canDrawDeck);
-  $("#pile-discard").classList.toggle("active", canDrawDiscard);
+
+  const discardsEl = $("#discards");
+  discardsEl.innerHTML = "";
+  for (const p of players) {
+    const li = document.createElement("li");
+    li.className = "discard-tile";
+    const isSelf = p.id === playerId;
+    const pile = p.discard || [];
+    const top = pile.length ? VALUES[pile[pile.length - 1]] : "–";
+    const canDrawThis = myTurn && data.turnPhase === "draw" && !isSelf && pile.length > 0;
+
+    const owner = document.createElement("span");
+    owner.className = "owner";
+    owner.textContent = isSelf ? "あなた" : p.name;
+    const topEl = document.createElement("span");
+    topEl.className = "top-card";
+    topEl.textContent = top;
+    const countEl = document.createElement("span");
+    countEl.className = "count";
+    countEl.textContent = `${pile.length}枚`;
+    li.appendChild(owner);
+    li.appendChild(topEl);
+    li.appendChild(countEl);
+
+    if (canDrawThis) {
+      li.classList.add("active");
+      li.addEventListener("click", () => withLock(() => drawFromDiscard(p.id)));
+    } else {
+      li.classList.add("disabled");
+    }
+    discardsEl.appendChild(li);
+  }
+
+  const logEl = $("#action-log");
+  logEl.innerHTML = "";
+  const log = data.actionLog || [];
+  for (const entry of log) {
+    const p = data.players?.[entry.playerId];
+    const name = entry.playerId === playerId ? "あなた" : (p?.name || "?");
+    const value = VALUES[entry.cardIdx] ?? "?";
+    const li = document.createElement("li");
+    li.textContent = `${name} は ${value} を捨てました`;
+    logEl.appendChild(li);
+  }
 
   const canDiscard = myTurn && data.turnPhase === "discard";
   const hand = me.hand || [];
@@ -436,7 +487,6 @@ $("#btn-leave-lobby").addEventListener("click", () => leaveRoom());
 $("#btn-back-home").addEventListener("click", () => leaveRoom(true));
 
 $("#pile-deck").addEventListener("click", () => withLock(drawFromDeck));
-$("#pile-discard").addEventListener("click", () => withLock(drawFromDiscard));
 
 // ---- Init ----
 (function init() {

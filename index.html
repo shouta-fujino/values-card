@@ -75,11 +75,12 @@
             <span class="pile-label">山札</span>
             <span id="deck-count" class="pile-count">0</span>
           </button>
-          <button id="pile-discard" class="pile pile-discard" disabled>
-            <span class="pile-label">捨て札</span>
-            <span id="discard-top" class="pile-top">–</span>
-          </button>
         </div>
+        <div class="discards-section">
+          <p class="section-label">捨て札 <small>(自分以外の誰かから1枚引ける)</small></p>
+          <ul id="discards" class="discards"></ul>
+        </div>
+        <ul id="action-log" class="action-log"></ul>
       </header>
       <div class="game-body">
         <h2>あなたの手札</h2>
