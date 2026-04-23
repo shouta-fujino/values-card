@@ -4,7 +4,83 @@
       "$roomCode": {
         ".read": true,
         ".write": true,
-        ".validate": "$roomCode.matches(/^[A-Z0-9]{6}$/)"
+        ".validate": "$roomCode.matches(/^[A-Z0-9]{6}$/)",
+
+        "status": {
+          ".validate": "newData.isString() && newData.val().matches(/^(lobby|playing|finished)$/)"
+        },
+        "hostId": {
+          ".validate": "newData.isString() && newData.val().length >= 8 && newData.val().length <= 64"
+        },
+        "createdAt": {
+          ".validate": "newData.isNumber()"
+        },
+        "currentSeat": {
+          ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20"
+        },
+        "turnPhase": {
+          ".validate": "newData.isString() && newData.val().matches(/^(draw|discard)$/)"
+        },
+
+        "deck": {
+          "$idx": {
+            ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 69"
+          }
+        },
+
+        "actionLog": {
+          "$idx": {
+            "playerId": {
+              ".validate": "newData.isString() && newData.val().length >= 8 && newData.val().length <= 64"
+            },
+            "cardIdx": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 69"
+            },
+            "at": {
+              ".validate": "newData.isNumber()"
+            },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "players": {
+          "$playerId": {
+            ".validate": "$playerId.length >= 8 && $playerId.length <= 64",
+            "name": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 20"
+            },
+            "seat": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 20"
+            },
+            "joinedAt": {
+              ".validate": "newData.isNumber()"
+            },
+            "hand": {
+              "$idx": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 69"
+              }
+            },
+            "discard": {
+              "$idx": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 69"
+              }
+            },
+            "finalHand": {
+              "$idx": {
+                ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 69"
+              }
+            },
+            "lastDrawnCard": {
+              ".validate": "newData.isNumber() && newData.val() >= 0 && newData.val() <= 69"
+            },
+            "lastDrawnFrom": {
+              ".validate": "newData.isString() && newData.val().length >= 1 && newData.val().length <= 64"
+            },
+            "$other": { ".validate": false }
+          }
+        },
+
+        "$other": { ".validate": false }
       }
     }
   }
