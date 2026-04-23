@@ -61,6 +61,39 @@ function shuffle(arr) {
   return a;
 }
 
+function pickTextColor(hex) {
+  const h = hex.replace("#", "");
+  const r = parseInt(h.substring(0, 2), 16);
+  const g = parseInt(h.substring(2, 4), 16);
+  const b = parseInt(h.substring(4, 6), 16);
+  const srgb = [r, g, b].map((c) => {
+    const s = c / 255;
+    return s <= 0.03928 ? s / 12.92 : Math.pow((s + 0.055) / 1.055, 2.4);
+  });
+  const lum = 0.2126 * srgb[0] + 0.7152 * srgb[1] + 0.0722 * srgb[2];
+  return lum > 0.55 ? "#1a1a1a" : "#ffffff";
+}
+
+function decorateCard(el, idx, variant) {
+  const v = VALUES[idx];
+  if (!v) return;
+  el.classList.add("card");
+  if (variant) el.classList.add(variant);
+  el.style.setProperty("--card-main", v.main);
+  el.style.setProperty("--card-accent", v.accent);
+  el.style.setProperty("--card-text", pickTextColor(v.main));
+  el.style.setProperty("--card-accent-text", pickTextColor(v.accent));
+  el.innerHTML = "";
+  const header = document.createElement("div");
+  header.className = "card-header";
+  header.textContent = v.en || "";
+  const body = document.createElement("div");
+  body.className = "card-body";
+  body.textContent = v.name;
+  el.appendChild(header);
+  el.appendChild(body);
+}
+
 function sortedPlayers(players) {
   return Object.entries(players || {})
     .map(([id, p]) => ({ id, ...p }))
@@ -351,23 +384,31 @@ function renderGame() {
   discardsEl.innerHTML = "";
   for (const p of players) {
     const li = document.createElement("li");
-    li.className = "discard-tile";
+    li.className = "discard-slot";
     const isSelf = p.id === playerId;
     const pile = p.discard || [];
-    const top = pile.length ? VALUES[pile[pile.length - 1]] : "–";
     const canDrawThis = myTurn && data.turnPhase === "draw" && !isSelf && pile.length > 0;
 
     const owner = document.createElement("span");
-    owner.className = "owner";
+    owner.className = "slot-owner";
     owner.textContent = isSelf ? "あなた" : p.name;
-    const topEl = document.createElement("span");
-    topEl.className = "top-card";
-    topEl.textContent = top;
-    const countEl = document.createElement("span");
-    countEl.className = "count";
-    countEl.textContent = `${pile.length}枚`;
     li.appendChild(owner);
-    li.appendChild(topEl);
+
+    const cardEl = document.createElement("div");
+    if (pile.length) {
+      decorateCard(cardEl, pile[pile.length - 1], "card-mini");
+    } else {
+      cardEl.className = "card card-mini card-empty";
+      const body = document.createElement("div");
+      body.className = "card-body";
+      body.textContent = "–";
+      cardEl.appendChild(body);
+    }
+    li.appendChild(cardEl);
+
+    const countEl = document.createElement("span");
+    countEl.className = "slot-count";
+    countEl.textContent = `${pile.length}枚`;
     li.appendChild(countEl);
 
     if (canDrawThis) {
@@ -385,7 +426,7 @@ function renderGame() {
   for (const entry of log) {
     const p = data.players?.[entry.playerId];
     const name = entry.playerId === playerId ? "あなた" : (p?.name || "?");
-    const value = VALUES[entry.cardIdx] ?? "?";
+    const value = VALUES[entry.cardIdx]?.name ?? "?";
     const li = document.createElement("li");
     li.textContent = `${name} は ${value} を捨てました`;
     logEl.appendChild(li);
@@ -397,7 +438,7 @@ function renderGame() {
   handList.innerHTML = "";
   for (const cardIdx of hand) {
     const li = document.createElement("li");
-    li.textContent = VALUES[cardIdx];
+    decorateCard(li, cardIdx, "card-hand");
     if (canDiscard) {
       li.classList.add("selectable");
       li.addEventListener("click", () => withLock(() => discardCard(cardIdx)));
@@ -431,7 +472,7 @@ function renderResult() {
   list.innerHTML = "";
   for (const idx of final) {
     const li = document.createElement("li");
-    li.textContent = VALUES[idx];
+    decorateCard(li, idx, "card-result");
     list.appendChild(li);
   }
 }
