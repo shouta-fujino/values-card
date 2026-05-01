@@ -161,6 +161,11 @@ async function joinRoom(code, name) {
   await subscribeRoom(code);
 }
 
+function setRoomHash(code, name) {
+  const suffix = name ? `/${encodeURIComponent(name)}` : "";
+  history.replaceState(null, "", `#${code}${suffix}`);
+}
+
 async function subscribeRoom(code) {
   if (roomRef) off(roomRef);
   currentRoomCode = code;
@@ -173,9 +178,10 @@ async function subscribeRoom(code) {
       return;
     }
     currentRoomData = data;
+    setRoomHash(code, data.players?.[playerId]?.name);
     render();
   });
-  history.replaceState(null, "", `#${code}`);
+  setRoomHash(code);
 }
 
 async function leaveRoom(skipUpdate = false) {
@@ -529,12 +535,56 @@ $("#btn-back-home").addEventListener("click", () => leaveRoom(true));
 
 $("#pile-deck").addEventListener("click", () => withLock(drawFromDeck));
 
-// ---- Init ----
-(function init() {
-  const hash = location.hash.replace("#", "").toUpperCase();
-  if (hash && /^[A-Z0-9]{6}$/.test(hash)) {
-    $("#btn-show-join").click();
-    $("#join-code").value = hash;
+async function rejoinByName(code, name) {
+  const snap = await get(ref(db, `rooms/${code}`));
+  if (!snap.exists()) throw new Error("その部屋コードは見つかりません。");
+  const data = snap.val();
+  const players = data.players || {};
+  const match = Object.entries(players).find(([, p]) => p.name === name);
+  if (match) {
+    playerId = match[0];
+    sessionStorage.setItem(PLAYER_ID_KEY, playerId);
+    await subscribeRoom(code);
+    return;
+  }
+  if (data.status !== "lobby") {
+    throw new Error("このゲームはすでに開始しています。");
+  }
+  await joinRoom(code, name);
+}
+
+function fillJoinForm(code, name) {
+  $(".home-actions").hidden = true;
+  $("#create-form").hidden = true;
+  $("#join-form").hidden = false;
+  $("#join-code").value = code;
+  if (name) {
+    $("#join-name").value = name;
+    $("#join-name").focus();
+  } else {
     $("#join-name").focus();
   }
+}
+
+// ---- Init ----
+(async function init() {
+  const raw = location.hash.replace("#", "");
+  if (!raw) return;
+  const [codeRaw, nameRaw] = raw.split("/");
+  const code = (codeRaw || "").toUpperCase();
+  if (!/^[A-Z0-9]{6}$/.test(code)) return;
+  let name = "";
+  try { name = nameRaw ? decodeURIComponent(nameRaw).trim() : ""; }
+  catch { name = ""; }
+  name = name.slice(0, 20);
+
+  if (name) {
+    try {
+      await rejoinByName(code, name);
+      return;
+    } catch (e) {
+      showError(e.message || "復帰に失敗しました");
+    }
+  }
+  fillJoinForm(code, name);
 })();
