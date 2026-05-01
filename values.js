@@ -38,7 +38,7 @@ export const VALUES = [
   { name: "遊び心", en: "Playfulness", main: "#F79F8F", accent: "#2A9D9D" },
   { name: "真摯", en: "Sincerity", main: "#FFFFFF", accent: "#B0D4F1" },
   { name: "正直", en: "Honesty", main: "#6A5ACD", accent: "#A8C8C0" },
-  { name: "需要", en: "Acceptance", main: "#FFF4A8", accent: "#C7C0E8" },
+  { name: "受容", en: "Acceptance", main: "#FFF4A8", accent: "#C7C0E8" },
   { name: "個性", en: "Individuality", main: "#E8BA00", accent: "#CBA2D4" },
   { name: "調和", en: "Harmony", main: "#F79F8F", accent: "#FFB8A8" },
   { name: "優しさ", en: "Kindness", main: "#E84118", accent: "#9BE64A" },
