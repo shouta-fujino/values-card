@@ -146,18 +146,29 @@ async function joinRoom(code, name) {
   const snap = await get(ref(db, `rooms/${code}`));
   if (!snap.exists()) throw new Error("その部屋コードは見つかりません。");
   const data = snap.val();
-  const alreadyIn = data.players && data.players[playerId];
-  if (data.status !== "lobby" && !alreadyIn) {
+  const players = data.players || {};
+
+  if (players[playerId]) {
+    await update(ref(db, `rooms/${code}/players/${playerId}`), { name });
+    await subscribeRoom(code);
+    return;
+  }
+
+  const match = Object.entries(players).find(([, p]) => p.name === name);
+  if (match) {
+    playerId = match[0];
+    sessionStorage.setItem(PLAYER_ID_KEY, playerId);
+    await subscribeRoom(code);
+    return;
+  }
+
+  if (data.status !== "lobby") {
     throw new Error("このゲームはすでに開始しています。");
   }
-  if (!alreadyIn) {
-    const seat = Object.keys(data.players || {}).length;
-    await update(ref(db, `rooms/${code}/players/${playerId}`), {
-      name, seat, joinedAt: Date.now()
-    });
-  } else {
-    await update(ref(db, `rooms/${code}/players/${playerId}`), { name });
-  }
+  const seat = Object.keys(players).length;
+  await update(ref(db, `rooms/${code}/players/${playerId}`), {
+    name, seat, joinedAt: Date.now()
+  });
   await subscribeRoom(code);
 }
 
@@ -535,24 +546,6 @@ $("#btn-back-home").addEventListener("click", () => leaveRoom(true));
 
 $("#pile-deck").addEventListener("click", () => withLock(drawFromDeck));
 
-async function rejoinByName(code, name) {
-  const snap = await get(ref(db, `rooms/${code}`));
-  if (!snap.exists()) throw new Error("その部屋コードは見つかりません。");
-  const data = snap.val();
-  const players = data.players || {};
-  const match = Object.entries(players).find(([, p]) => p.name === name);
-  if (match) {
-    playerId = match[0];
-    sessionStorage.setItem(PLAYER_ID_KEY, playerId);
-    await subscribeRoom(code);
-    return;
-  }
-  if (data.status !== "lobby") {
-    throw new Error("このゲームはすでに開始しています。");
-  }
-  await joinRoom(code, name);
-}
-
 function fillJoinForm(code, name) {
   $(".home-actions").hidden = true;
   $("#create-form").hidden = true;
@@ -580,7 +573,7 @@ function fillJoinForm(code, name) {
 
   if (name) {
     try {
-      await rejoinByName(code, name);
+      await joinRoom(code, name);
       return;
     } catch (e) {
       showError(e.message || "復帰に失敗しました");
